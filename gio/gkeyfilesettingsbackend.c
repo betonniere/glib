@@ -110,12 +110,17 @@ g_keyfile_settings_backend_keyfile_write (GKeyfileSettingsBackend *kfsb)
 {
   gchar *contents;
   gsize length;
+  GError *error = NULL;
 
   contents = g_key_file_to_data (kfsb->keyfile, &length, NULL);
-  g_file_replace_contents (kfsb->file, contents, length, NULL, FALSE,
-                           G_FILE_CREATE_REPLACE_DESTINATION |
-                           G_FILE_CREATE_PRIVATE,
-                           NULL, NULL, NULL);
+  if (!g_file_replace_contents (kfsb->file, contents, length, NULL, FALSE,
+                                G_FILE_CREATE_REPLACE_DESTINATION |
+                                G_FILE_CREATE_PRIVATE,
+                                NULL, NULL, &error))
+    {
+      g_warning ("Failed to write keyfile to %s: %s", g_file_peek_path (kfsb->file), error->message);
+      g_error_free (error);
+    }
 
   compute_checksum (kfsb->digest, contents, length);
   g_free (contents);
@@ -689,6 +694,7 @@ static void
 g_keyfile_settings_backend_constructed (GObject *object)
 {
   GKeyfileSettingsBackend *kfsb = G_KEYFILE_SETTINGS_BACKEND (object);
+  const char *path;
 
   if (kfsb->file == NULL)
     {
@@ -709,7 +715,9 @@ g_keyfile_settings_backend_constructed (GObject *object)
   kfsb->permission = g_simple_permission_new (TRUE);
 
   kfsb->dir = g_file_get_parent (kfsb->file);
-  g_mkdir_with_parents (g_file_peek_path (kfsb->dir), 0700);
+  path = g_file_peek_path (kfsb->dir);
+  if (g_mkdir_with_parents (path, 0700) == -1)
+    g_warning ("Failed to create %s: %s", path, g_strerror (errno));
 
   kfsb->file_monitor = g_file_monitor (kfsb->file, G_FILE_MONITOR_NONE, NULL, NULL);
   kfsb->dir_monitor = g_file_monitor (kfsb->dir, G_FILE_MONITOR_NONE, NULL, NULL);
